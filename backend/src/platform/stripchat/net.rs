@@ -127,6 +127,24 @@ pub(super) fn build_api_client(
 		.user_agent(USER_AGENT)
 		.timeout(std::time::Duration::from_secs(30))
 		.tcp_keepalive(std::time::Duration::from_secs(15));
+	// wreq uses bundled roots by default. An explicit CA bundle lets deployments
+	// use private HTTPS mirrors with certificate and hostname verification enabled.
+	if let Some(path) = std::env::var_os("SSL_CERT_FILE").filter(|path| !path.is_empty()) {
+		let path = std::path::Path::new(&path);
+		let pem = std::fs::read(path).map_err(|e| {
+			AppError::Other(format!(
+				"Could not read SSL_CERT_FILE {}: {e}",
+				path.display()
+			))
+		})?;
+		let store = wreq::tls::trust::CertStore::from_pem_stack(&pem).map_err(|e| {
+			AppError::Other(format!(
+				"Could not load SSL_CERT_FILE {}: {e}",
+				path.display()
+			))
+		})?;
+		builder = builder.tls_cert_store(store);
+	}
 	if let Some(proxy) = proxy_url
 		&& !proxy.is_empty()
 	{
